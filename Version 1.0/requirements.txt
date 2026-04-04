@@ -1,0 +1,6 @@
+# Character recognition project — Python 3.9+
+numpy>=1.23
+matplotlib>=3.7
+seaborn>=0.12
+flask>=2.3
+pillow>=10.0

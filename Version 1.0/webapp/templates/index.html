@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character Recognition — Neural Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ── CSS Variables ──────────────────────────────────────── */
+    :root {
+      --bg:        #0a0b0f;
+      --surface:   #111318;
+      --panel:     #181b23;
+      --border:    #252933;
+      --accent:    #00e5ff;
+      --accent2:   #ff6b6b;
+      --accent3:   #a8ff78;
+      --dim:       #555e72;
+      --text:      #dde3f0;
+      --text-dim:  #8892a4;
+      --mono:      'Space Mono', monospace;
+      --sans:      'Syne', sans-serif;
+      --radius:    10px;
+      --glow:      0 0 24px rgba(0,229,255,0.18);
+    }
+
+    /* ── Reset & Base ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background grid ─────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    .container {
+      position: relative; z-index: 1;
+      max-width: 1100px; margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    header { text-align: center; margin-bottom: 48px; }
+    .badge {
+      display: inline-block;
+      font-family: var(--mono); font-size: 11px; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 4px;
+      padding: 4px 12px; margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: clamp(28px, 5vw, 46px);
+      font-weight: 800; line-height: 1.1;
+      background: linear-gradient(135deg, var(--text) 40%, var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      margin-top: 10px; color: var(--text-dim);
+      font-size: 15px; line-height: 1.6;
+    }
+
+    /* ── Main grid ───────────────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 760px) { .main-grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.6;
+    }
+    .card-title {
+      font-family: var(--mono); font-size: 11px;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 18px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title span { color: var(--dim); }
+
+    /* ── Tab switcher ─────────────────────────────────────────── */
+    .tabs {
+      display: flex; gap: 4px;
+      background: var(--panel); border-radius: 8px;
+      padding: 4px; margin-bottom: 20px;
+    }
+    .tab-btn {
+      flex: 1; padding: 8px;
+      background: none; border: none;
+      font-family: var(--mono); font-size: 12px;
+      color: var(--text-dim); cursor: pointer;
+      border-radius: 6px; transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--accent); color: #000;
+      font-weight: 700;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Canvas draw ─────────────────────────────────────────── */
+    .canvas-wrap {
+      position: relative;
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    #draw-canvas {
+      width: 280px; height: 280px;
+      background: #000; border: 2px solid var(--border);
+      border-radius: 8px; cursor: crosshair;
+      touch-action: none;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8);
+    }
+    #draw-canvas:hover { border-color: var(--accent); }
+    .canvas-hint {
+      font-family: var(--mono); font-size: 11px;
+      color: var(--dim); text-align: center;
+    }
+    .brush-controls {
+      display: flex; align-items: center; gap: 12px;
+      font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    }
+    .brush-controls input[type=range] {
+      accent-color: var(--accent); width: 80px;
+    }
+
+    /* ── Upload area ─────────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: 8px;
+      padding: 40px 20px; text-align: center;
+      cursor: pointer; transition: all 0.25s;
+      background: var(--panel);
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(0,229,255,0.04);
+    }
+    .upload-icon { font-size: 36px; margin-bottom: 12px; }
+    .upload-zone p { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+    .upload-zone strong { color: var(--accent); }
+    #file-input { display: none; }
+
+    #upload-preview-wrap { margin-top: 14px; text-align: center; display: none; }
+    #upload-preview {
+      max-width: 200px; max-height: 200px;
+      border: 1px solid var(--border); border-radius: 6px;
+    }
+
+    /* ── Button row ──────────────────────────────────────────── */
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+    .btn {
+      flex: 1; padding: 12px 0;
+      font-family: var(--mono); font-size: 13px; font-weight: 700;
+      border: none; border-radius: 8px; cursor: pointer;
+      transition: all 0.2s; letter-spacing: 1px; text-transform: uppercase;
+    }
+    .btn-primary {
+      background: var(--accent); color: #000;
+      box-shadow: 0 0 20px rgba(0,229,255,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 28px rgba(0,229,255,0.45); }
+    .btn-primary:active { transform: none; }
+    .btn-ghost {
+      background: transparent; color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ── Result card ──────────────────────────────────────────── */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      min-height: 380px;
+      display: flex; flex-direction: column; gap: 20px;
+      position: relative; overflow: hidden;
+    }
+    .result-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+      opacity: 0.6;
+    }
+
+    /* Idle placeholder */
+    .idle-placeholder {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; opacity: 0.4;
+    }
+    .idle-placeholder .big-char {
+      font-size: 80px; font-weight: 800; font-family: var(--sans);
+      background: linear-gradient(135deg, var(--dim), var(--border));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .idle-placeholder p {
+      font-family: var(--mono); font-size: 12px; color: var(--dim);
+    }
+
+    /* Big predicted char */
+    .predicted-char {
+      text-align: center; padding: 20px 0 8px;
+    }
+    .char-letter {
+      font-size: 90px; font-weight: 800; line-height: 1;
+      font-family: var(--sans);
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: pop-in 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes pop-in {
+      from { transform: scale(0.4); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+    .char-label {
+      font-family: var(--mono); font-size: 12px;
+      color: var(--text-dim); margin-top: 6px; letter-spacing: 1px;
+    }
+
+    /* Confidence bars */
+    .conf-section { display: flex; flex-direction: column; gap: 10px; }
+    .conf-row { display: flex; align-items: center; gap: 10px; }
+    .conf-name {
+      font-family: var(--mono); font-size: 13px; font-weight: 700;
+      color: var(--text); width: 20px; text-align: center;
+    }
+    .conf-bar-bg {
+      flex: 1; height: 10px; background: var(--panel);
+      border-radius: 5px; overflow: hidden;
+    }
+    .conf-bar {
+      height: 100%; border-radius: 5px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+      background: var(--dim);
+    }
+    .conf-bar.winner { background: linear-gradient(90deg, var(--accent), var(--accent3)); }
+    .conf-pct {
+      font-family: var(--mono); font-size: 12px;
+      color: var(--text-dim); width: 46px; text-align: right;
+    }
+
+    /* 8×8 preview grid */
+    .grid-section { }
+    .grid-label {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--dim); margin-bottom: 8px;
+    }
+    .pixel-grid-wrap { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .pixel-grid {
+      display: grid; grid-template-columns: repeat(8, 1fr);
+      gap: 2px; width: 130px; height: 130px;
+    }
+    .pixel-cell {
+      border-radius: 2px;
+      transition: background 0.1s;
+    }
+
+    /* ── Model info strip ────────────────────────────────────── */
+    .info-strip {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      padding: 16px 20px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-top: 24px;
+    }
+    .info-item {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .info-key {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--dim);
+    }
+    .info-val {
+      font-family: var(--mono); font-size: 13px; color: var(--accent);
+    }
+
+    /* ── Templates row ───────────────────────────────────────── */
+    .templates-row {
+      display: flex; gap: 16px; justify-content: center;
+      flex-wrap: wrap; margin-top: 24px;
+    }
+    .tmpl-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px; text-align: center;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .tmpl-card:hover {
+      border-color: var(--accent); transform: translateY(-2px);
+      box-shadow: var(--glow);
+    }
+    .tmpl-label {
+      font-family: var(--mono); font-size: 11px; color: var(--dim);
+      margin-top: 8px; letter-spacing: 1px; text-transform: uppercase;
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────── */
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error msg ───────────────────────────────────────────── */
+    .error-msg {
+      color: var(--accent2); font-family: var(--mono); font-size: 12px;
+      text-align: center; padding: 20px;
+    }
+
+    /* ── Section title ───────────────────────────────────────── */
+    .section-title {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--dim);
+      text-align: center; margin-top: 40px; margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header>
+    <div class="badge">Neural Network · CS6302E</div>
+    <h1>Character Recognition</h1>
+    <p>Draw or upload an image of <strong>B</strong>, <strong>0</strong>, or <strong>E</strong>.<br>
+       The 64-3-3 neural network will classify it in real time.</p>
+  </header>
+
+  <!-- ── Main two-column grid ────────────────────────────────── -->
+  <div class="main-grid">
+
+    <!-- LEFT: Input panel -->
+    <div class="card">
+      <div class="card-title">01 <span>/</span> Input</div>
+
+      <!-- Tab switcher -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('draw')">✏ Draw</button>
+        <button class="tab-btn"        onclick="switchTab('upload')">⬆ Upload</button>
+      </div>
+
+      <!-- Draw tab -->
+      <div class="tab-panel active" id="tab-draw">
+        <div class="canvas-wrap">
+          <canvas id="draw-canvas" width="280" height="280"></canvas>
+          <div class="canvas-hint">Draw inside the box · left-click to draw · right-click to erase</div>
+          <div class="brush-controls">
+            <span>Brush</span>
+            <input type="range" id="brush-size" min="8" max="60" value="28" />
+            <span id="brush-val">28 px</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="classifyCanvas()">⚡ Classify</button>
+          <button class="btn btn-ghost"   onclick="clearCanvas()">Clear</button>
+        </div>
+      </div>
+
+      <!-- Upload tab -->
+      <div class="tab-panel" id="tab-upload">
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <div class="upload-icon">🖼</div>
+          <p>Click or drag &amp; drop an image<br>
+             <strong>PNG · JPG · BMP · GIF</strong><br>
+             <span style="font-size:11px">The image will be resized to 8×8 automatically</span></p>
+          <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)" />
+        </div>
+        <div id="upload-preview-wrap">
+          <img id="upload-preview" alt="preview" />
+        </div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn btn-primary" onclick="classifyUpload()">⚡ Classify</button>
+          <button class="btn btn-ghost"   onclick="clearUpload()">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Result panel -->
+    <div class="result-card" id="result-panel">
+      <div class="card-title">02 <span>/</span> Prediction</div>
+
+      <!-- Idle state -->
+      <div class="idle-placeholder" id="idle-state">
+        <div class="big-char">?</div>
+        <p>Draw or upload a character to classify</p>
+      </div>
+
+      <!-- Loading state -->
+      <div id="loading-state" style="display:none; flex:1; display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px;">
+        <div class="spinner"></div>
+        <p style="font-family:var(--mono); font-size:12px; color:var(--dim)">Running inference…</p>
+      </div>
+
+      <!-- Result state -->
+      <div id="result-state" style="display:none;">
+
+        <div class="predicted-char">
+          <div class="char-letter" id="res-char">?</div>
+          <div class="char-label" id="res-desc"></div>
+        </div>
+
+        <div class="conf-section" id="conf-bars"></div>
+
+        <div class="grid-section">
+          <div class="grid-label">Preprocessed 8×8 input fed to network</div>
+          <div class="pixel-grid-wrap">
+            <div class="pixel-grid" id="pixel-preview"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Error state -->
+      <div id="error-state" style="display:none;">
+        <div class="error-msg" id="error-msg">⚠ Something went wrong.</div>
+      </div>
+    </div>
+
+  </div><!-- /main-grid -->
+
+  <!-- ── Model info ──────────────────────────────────────────── -->
+  <div class="info-strip" id="model-info-strip">
+    <div class="info-item"><span class="info-key">Architecture</span><span class="info-val" id="mi-arch">—</span></div>
+    <div class="info-item"><span class="info-key">Parameters</span><span class="info-val" id="mi-params">—</span></div>
+    <div class="info-item"><span class="info-key">Activation</span><span class="info-val" id="mi-act">—</span></div>
+    <div class="info-item"><span class="info-key">Optimizer</span><span class="info-val" id="mi-opt">—</span></div>
+    <div class="info-item"><span class="info-key">Loss</span><span class="info-val" id="mi-loss">—</span></div>
+  </div>
+
+  <!-- ── Reference templates ─────────────────────────────────── -->
+  <div class="section-title">Reference Templates — click to load into canvas</div>
+  <div class="templates-row" id="templates-row">
+    <!-- populated by JS -->
+  </div>
+
+</div><!-- /container -->
+
+<script>
+/* ══════════════════════════════════════════════════════
+   Canvas Drawing
+══════════════════════════════════════════════════════ */
+const canvas  = document.getElementById("draw-canvas");
+const ctx     = canvas.getContext("2d");
+let drawing   = false;
+let erasing   = false;
+let brushSize = 28;
+
+// Fill canvas black on load
+ctx.fillStyle = "#000";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+const brushInput = document.getElementById("brush-size");
+brushInput.addEventListener("input", () => {
+  brushSize = +brushInput.value;
+  document.getElementById("brush-val").textContent = brushSize + " px";
+});
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const scX = canvas.width  / r.width;
+  const scY = canvas.height / r.height;
+  const src = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - r.left) * scX, y: (src.clientY - r.top) * scY };
+}
+
+function drawDot(x, y, erase) {
+  ctx.beginPath();
+  ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+  ctx.fillStyle = erase ? "#000" : "#fff";
+  ctx.fill();
+}
+
+canvas.addEventListener("mousedown",  e => { drawing = true; erasing = e.button === 2; drawDot(...Object.values(getPos(e)), erasing); });
+canvas.addEventListener("mousemove",  e => { if (drawing) drawDot(...Object.values(getPos(e)), erasing); });
+canvas.addEventListener("mouseup",    () => { drawing = false; });
+canvas.addEventListener("mouseleave", () => { drawing = false; });
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("touchstart", e => { e.preventDefault(); drawing = true; erasing = false; drawDot(...Object.values(getPos(e)), false); }, { passive: false });
+canvas.addEventListener("touchmove",  e => { e.preventDefault(); if (drawing) drawDot(...Object.values(getPos(e)), false); }, { passive: false });
+canvas.addEventListener("touchend",   () => { drawing = false; });
+
+function clearCanvas() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  showIdle();
+}
+
+function classifyCanvas() {
+  const b64 = canvas.toDataURL("image/png");
+  sendPrediction({ image_b64: b64 }, "application/json");
+}
+
+/* ══════════════════════════════════════════════════════
+   File Upload
+══════════════════════════════════════════════════════ */
+let uploadedFile = null;
+
+const zone = document.getElementById("upload-zone");
+zone.addEventListener("dragover",  e => { e.preventDefault(); zone.classList.add("drag-over"); });
+zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+zone.addEventListener("drop", e => {
+  e.preventDefault(); zone.classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) loadUploadPreview(f);
+});
+
+function handleFileSelect(e) {
+  const f = e.target.files[0];
+  if (f) loadUploadPreview(f);
+}
+
+function loadUploadPreview(file) {
+  uploadedFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById("upload-preview");
+    img.src = ev.target.result;
+    document.getElementById("upload-preview-wrap").style.display = "block";
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearUpload() {
+  uploadedFile = null;
+  document.getElementById("upload-preview-wrap").style.display = "none";
+  document.getElementById("file-input").value = "";
+  showIdle();
+}
+
+function classifyUpload() {
+  if (!uploadedFile) { alert("Please select an image first."); return; }
+  const fd = new FormData();
+  fd.append("image", uploadedFile);
+  sendPrediction(fd, null);  // null = FormData, browser sets correct Content-Type
+}
+
+/* ══════════════════════════════════════════════════════
+   Tab switching
+══════════════════════════════════════════════════════ */
+function switchTab(which) {
+  document.querySelectorAll(".tab-btn").forEach((b, i) => {
+    const names = ["draw", "upload"];
+    b.classList.toggle("active", names[i] === which);
+  });
+  document.getElementById("tab-draw").classList.toggle("active",   which === "draw");
+  document.getElementById("tab-upload").classList.toggle("active", which === "upload");
+}
+
+/* ══════════════════════════════════════════════════════
+   Prediction
+══════════════════════════════════════════════════════ */
+async function sendPrediction(body, contentType) {
+  showLoading();
+  try {
+    const opts = { method: "POST" };
+    if (contentType === "application/json") {
+      opts.headers = { "Content-Type": "application/json" };
+      opts.body = JSON.stringify(body);
+    } else {
+      opts.body = body;   // FormData
+    }
+
+    const resp = await fetch("/predict", opts);
+    const data = await resp.json();
+
+    if (data.error) throw new Error(data.error);
+    showResult(data);
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   UI State management
+══════════════════════════════════════════════════════ */
+function showIdle() {
+  document.getElementById("idle-state").style.display    = "flex";
+  document.getElementById("loading-state").style.display = "none";
+  document.getElementById("result-state").style.display  = "none";
+  document.getElementById("error-state").style.display   = "none";
+}
+
+function showLoading() {
+  document.getElementById("idle-state").style.display    = "none";
+  document.getElementById("loading-state").style.display = "flex";
+  document.getElementById("result-state").style.display  = "none";
+  document.getElementById("error-state").style.display   = "none";
+}
+
+function showResult(data) {
+  document.getElementById("idle-state").style.display    = "none";
+  document.getElementById("loading-state").style.display = "none";
+  document.getElementById("result-state").style.display  = "block";
+  document.getElementById("error-state").style.display   = "none";
+
+  // Big character
+  document.getElementById("res-char").textContent = data.predicted_class;
+  document.getElementById("res-desc").textContent = data.description;
+
+  // Confidence bars
+  const bars = document.getElementById("conf-bars");
+  bars.innerHTML = "";
+  const conf = data.confidences;
+  const winner = data.predicted_class;
+  ["B","0","E"].forEach(name => {
+    const pct = conf[name];
+    const isWinner = name === winner;
+    bars.innerHTML += `
+      <div class="conf-row">
+        <div class="conf-name">${name}</div>
+        <div class="conf-bar-bg">
+          <div class="conf-bar ${isWinner ? 'winner' : ''}"
+               style="width:${pct}%"></div>
+        </div>
+        <div class="conf-pct">${pct}%</div>
+      </div>`;
+  });
+
+  // 8×8 pixel preview
+  const grid = document.getElementById("pixel-preview");
+  grid.innerHTML = "";
+  if (data.pixel_preview) {
+    const pixels = data.pixel_preview;
+    const mn = Math.min(...pixels), mx = Math.max(...pixels);
+    pixels.forEach(v => {
+      const norm = (v - mn) / (mx - mn + 1e-9);   // 0→1
+      const lum  = Math.round(norm * 255);
+      const cell = document.createElement("div");
+      cell.className = "pixel-cell";
+      cell.style.background = `rgb(${lum},${lum},${lum})`;
+      grid.appendChild(cell);
+    });
+  }
+}
+
+function showError(msg) {
+  document.getElementById("idle-state").style.display    = "none";
+  document.getElementById("loading-state").style.display = "none";
+  document.getElementById("result-state").style.display  = "none";
+  document.getElementById("error-state").style.display   = "block";
+  document.getElementById("error-msg").textContent = "⚠ " + msg;
+}
+
+/* ══════════════════════════════════════════════════════
+   Model info & Templates on load
+══════════════════════════════════════════════════════ */
+async function loadModelInfo() {
+  try {
+    const data = await fetch("/model_info").then(r => r.json());
+    document.getElementById("mi-arch").textContent   = data.architecture;
+    document.getElementById("mi-params").textContent = data.total_params;
+    document.getElementById("mi-act").textContent    = "tanh + softmax";
+    document.getElementById("mi-opt").textContent    = data.optimizer;
+    document.getElementById("mi-loss").textContent   = data.loss;
+  } catch {}
+}
+
+async function loadTemplates() {
+  const row = document.getElementById("templates-row");
+  for (const ch of ["B","0","E"]) {
+    try {
+      const data = await fetch(`/template/${ch}`).then(r => r.json());
+      const pixels = data.pixels;
+
+      // Build a small canvas for the template
+      const tc = document.createElement("canvas");
+      tc.width = tc.height = 64;
+      const tcx = tc.getContext("2d");
+      pixels.forEach((v, i) => {
+        const col = Math.round(((v + 1) / 2) * 255);
+        tcx.fillStyle = `rgb(${col},${col},${col})`;
+        const px = (i % 8) * 8, py = Math.floor(i / 8) * 8;
+        tcx.fillRect(px, py, 8, 8);
+      });
+
+      const card = document.createElement("div");
+      card.className = "tmpl-card";
+      card.title = `Load template '${ch}' into canvas`;
+      card.innerHTML = `<div class="tmpl-label">${ch}</div>`;
+      card.insertBefore(tc, card.firstChild);
+      tc.style.cssText = "width:64px;height:64px;image-rendering:pixelated;display:block;margin:0 auto;border-radius:4px";
+      card.onclick = () => loadTemplateToCanvas(pixels, ch);
+      row.appendChild(card);
+    } catch {}
+  }
+}
+
+function loadTemplateToCanvas(pixels, charName) {
+  // Scale 8×8 template to full canvas size
+  const W = canvas.width, H = canvas.height;
+  const cellW = W / 8, cellH = H / 8;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+
+  pixels.forEach((v, i) => {
+    const col = Math.round(((v + 1) / 2) * 255);
+    ctx.fillStyle = `rgb(${col},${col},${col})`;
+    const px = (i % 8) * cellW, py = Math.floor(i / 8) * cellH;
+    ctx.fillRect(px, py, cellW, cellH);
+  });
+
+  // Switch to draw tab
+  switchTab("draw");
+}
+
+// Init
+loadModelInfo();
+loadTemplates();
+showIdle();
+</script>
+</body>
+</html>
