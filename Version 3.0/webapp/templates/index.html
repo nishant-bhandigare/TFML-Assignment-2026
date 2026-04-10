@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TFML Character Predictor</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; }
+    button { padding: 10px 14px; cursor: pointer; }
+    pre { background: #f4f4f4; padding: 12px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Predict B / 0 / E</h2>
+    <p>Upload any image. It will be resized to 8x8 and classified.</p>
+    <input type="file" id="imageInput" accept="image/*">
+    <button id="predictBtn">Predict</button>
+    <h3>Result</h3>
+    <pre id="resultBox">No prediction yet.</pre>
+  </div>
+
+  <script>
+    const input = document.getElementById("imageInput");
+    const btn = document.getElementById("predictBtn");
+    const box = document.getElementById("resultBox");
+
+    btn.addEventListener("click", async () => {
+      if (!input.files.length) {
+        box.textContent = "Please select an image first.";
+        return;
+      }
+      const fd = new FormData();
+      fd.append("image", input.files[0]);
+      const resp = await fetch("/predict", { method: "POST", body: fd });
+      const data = await resp.json();
+      box.textContent = JSON.stringify(data, null, 2);
+    });
+  </script>
+</body>
+</html>
