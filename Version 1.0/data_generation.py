@@ -115,11 +115,10 @@ def generate_dataset(n_per_class: int = SAMPLES_PER_CLASS,
         X_list.append(samples)
         y_list.append(np.tile(one_hot, (n_per_class, 1)))
         label_list.append(np.full(n_per_class, class_idx, dtype=int))
-        print(f"  Class '{name}' ({class_idx}): {n_per_class} samples generated.")
 
-    X = np.vstack(X_list)          # (N, 64)
-    y = np.vstack(y_list)          # (N, 3)
-    labels = np.concatenate(label_list)  # (N,)
+    X = np.vstack(X_list)               # (N, 64)
+    y = np.vstack(y_list)               # (N, 3)
+    labels = np.concatenate(label_list) # (N,)
 
     # Shuffle the dataset
     perm = rng.permutation(len(X))
@@ -132,7 +131,6 @@ def save_dataset(X, y, labels, out_dir: str = "data"):
     np.save(os.path.join(out_dir, "X.npy"), X)
     np.save(os.path.join(out_dir, "y.npy"), y)
     np.save(os.path.join(out_dir, "labels.npy"), labels)
-    print(f"\nDataset saved to '{out_dir}/'")
 
 
 def load_dataset(out_dir: str = "data") -> tuple:
@@ -154,9 +152,8 @@ def plot_templates(save_path: str = None):
     fig.suptitle("Clean 8×8 Character Templates", fontsize=14, fontweight="bold")
 
     for ax, (class_idx, (template, _, name)) in zip(axes, CLASS_INFO.items()):
-        # imshow: vmin/vmax maps -1->dark, +1->light
-        im = ax.imshow(template, cmap="gray", vmin=-1, vmax=1,
-                       interpolation="nearest")
+        ax.imshow(template, cmap="gray", vmin=-1, vmax=1,
+                  interpolation="nearest")
         ax.set_title(f"Class '{name}'  (label {class_idx})", fontsize=12)
         ax.axis("off")
 
@@ -169,7 +166,6 @@ def plot_templates(save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Templates plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -178,7 +174,7 @@ def plot_noisy_samples(X, labels, n_cols: int = 5, save_path: str = None):
     """
     Show a few noisy samples for each class to verify noise addition.
     """
-    n_show = n_cols                         # samples per class to display
+    n_show = n_cols
     n_classes = 3
     fig, axes = plt.subplots(n_classes, n_show,
                              figsize=(n_show * 1.8, n_classes * 2.0))
@@ -204,7 +200,6 @@ def plot_noisy_samples(X, labels, n_cols: int = 5, save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Noisy samples plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -236,7 +231,6 @@ def plot_pixel_distribution(X, labels, save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Distribution plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -264,23 +258,13 @@ def print_dataset_summary(X, y, labels):
 if __name__ == "__main__":
     os.makedirs("plots", exist_ok=True)
 
-    print("\n[1] Generating dataset …")
     X, y, labels = generate_dataset(n_per_class=SAMPLES_PER_CLASS, seed=42)
-
     print_dataset_summary(X, y, labels)
 
-    print("\n[2] Saving dataset …")
     save_dataset(X, y, labels, out_dir="data")
 
-    print("\n[3] Plotting templates …")
     plot_templates(save_path="plots/templates.png")
-
-    print("\n[4] Plotting noisy samples …")
     plot_noisy_samples(X, labels, n_cols=5,
                        save_path="plots/noisy_samples.png")
-
-    print("\n[5] Plotting pixel distributions …")
     plot_pixel_distribution(X, labels,
                             save_path="plots/pixel_distribution.png")
-
-    print("\nPart 1 complete.")

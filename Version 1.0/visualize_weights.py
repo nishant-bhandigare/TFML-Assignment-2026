@@ -17,7 +17,7 @@ sys.path.insert(0, ".")
 from model import NeuralNetwork
 
 
-CLASS_NAMES  = ["B", "0", "E"]
+CLASS_NAMES   = ["B", "0", "E"]
 HIDDEN_COLORS = ["#4C72B0", "#DD8452", "#55A868"]
 
 
@@ -31,10 +31,9 @@ def plot_input_hidden_weights(net: NeuralNetwork, save_path: str = None):
     A positive weight in a pixel position means that pixel strongly excites
     the hidden unit; negative means it suppresses it.
     """
-    W1 = net.W1          # shape (64, H)
+    W1 = net.get_weights()["W1"]   # shape (64, H)
     H  = W1.shape[1]
 
-    # Symmetric color range so zero = white
     abs_max = np.abs(W1).max()
     norm = TwoSlopeNorm(vmin=-abs_max, vcenter=0, vmax=abs_max)
 
@@ -47,7 +46,7 @@ def plot_input_hidden_weights(net: NeuralNetwork, save_path: str = None):
 
     for h in range(H):
         ax = fig.add_subplot(1, H, h + 1)
-        w_img = W1[:, h].reshape(8, 8)          # reshape column -> 8×8
+        w_img = W1[:, h].reshape(8, 8)
         im = ax.imshow(w_img, cmap="RdBu_r", norm=norm, interpolation="nearest")
 
         ax.set_title(f"Hidden Unit {h + 1}", fontsize=12, fontweight="bold",
@@ -58,19 +57,16 @@ def plot_input_hidden_weights(net: NeuralNetwork, save_path: str = None):
         ax.set_yticklabels(range(8), fontsize=7)
         ax.tick_params(length=2)
 
-        # Pixel grid lines
         for x in range(9):
             ax.axvline(x - 0.5, color="gray", linewidth=0.3, alpha=0.5)
         for y in range(9):
             ax.axhline(y - 0.5, color="gray", linewidth=0.3, alpha=0.5)
 
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
-                     label="Weight value")
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Weight value")
 
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Input-hidden weights plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -83,21 +79,19 @@ def plot_input_hidden_overlay(net: NeuralNetwork, save_path: str = None):
     from data_generation import TEMPLATE_B, TEMPLATE_0, TEMPLATE_E
     templates = [TEMPLATE_B, TEMPLATE_0, TEMPLATE_E]
 
-    W1 = net.W1          # (64, H)
+    W1 = net.get_weights()["W1"]   # (64, H)
     H  = W1.shape[1]
     abs_max = np.abs(W1).max()
     norm = TwoSlopeNorm(vmin=-abs_max, vcenter=0, vmax=abs_max)
 
-    n_rows = 2           # row 0: templates, row 1: weight maps
     n_cols = max(H, 3)
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 3, 6))
+    fig, axes = plt.subplots(2, n_cols, figsize=(n_cols * 3, 6))
     fig.suptitle(
         "Part 3(a) — Templates vs Input->Hidden Weight Maps",
         fontsize=13, fontweight="bold"
     )
 
-    # Row 0: character templates (for reference)
+    # Row 0: character templates
     for j in range(n_cols):
         ax = axes[0][j]
         if j < 3:
@@ -126,7 +120,6 @@ def plot_input_hidden_overlay(net: NeuralNetwork, save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Overlay plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -135,10 +128,10 @@ def plot_input_hidden_overlay(net: NeuralNetwork, save_path: str = None):
 
 def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
     """
-    For each output unit (B, 0, E), display its 3 hidden-to-output weights
+    For each output unit (B, 0, E), display its H hidden-to-output weights
     as a grouped bar chart.  Also shows a heatmap matrix of the full W2.
     """
-    W2 = net.W2          # shape (H, 3)
+    W2 = net.get_weights()["W2"]   # shape (H, 3)
     H  = W2.shape[0]
 
     fig = plt.figure(figsize=(14, 5))
@@ -152,8 +145,8 @@ def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
     ax_hm  = fig.add_subplot(gs[1])
 
     # ── Grouped bar chart ─────────────────────────────────────────────────
-    x     = np.arange(len(CLASS_NAMES))   # output unit positions
-    width = 0.25
+    x       = np.arange(len(CLASS_NAMES))
+    width   = 0.25
     offsets = np.linspace(-(H - 1) * width / 2, (H - 1) * width / 2, H)
 
     for h in range(H):
@@ -161,13 +154,13 @@ def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
                           label=f"Hidden Unit {h + 1}",
                           color=HIDDEN_COLORS[h % len(HIDDEN_COLORS)],
                           edgecolor="white", linewidth=0.6, alpha=0.88)
-        # Value labels on bars
         for bar in bars:
             ht = bar.get_height()
             ax_bar.text(
                 bar.get_x() + bar.get_width() / 2,
                 ht + (0.005 if ht >= 0 else -0.02),
-                f"{ht:.2f}", ha="center", va="bottom" if ht >= 0 else "top",
+                f"{ht:.2f}", ha="center",
+                va="bottom" if ht >= 0 else "top",
                 fontsize=8, color="black"
             )
 
@@ -193,7 +186,6 @@ def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
     ax_hm.set_ylabel("Hidden Unit", fontsize=10)
     ax_hm.set_title("W2 Matrix\n(rows=hidden, cols=output)", fontsize=10)
 
-    # Annotate cells
     for i in range(H):
         for j in range(3):
             ax_hm.text(j, i, f"{W2[i, j]:.2f}",
@@ -205,7 +197,6 @@ def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Hidden-output weights plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -214,14 +205,17 @@ def plot_hidden_output_weights(net: NeuralNetwork, save_path: str = None):
 
 def plot_biases(net: NeuralNetwork, save_path: str = None):
     """Display bias values for both layers as annotated bar charts."""
+    w  = net.get_weights()
+    b1 = w["b1"]
+    b2 = w["b2"]
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
     fig.suptitle("Bias Values — Both Layers", fontsize=12, fontweight="bold")
 
-    # Hidden biases
-    ax1.bar(range(net.hidden_dim), net.b1,
+    ax1.bar(range(net.hidden_dim), b1,
             color=HIDDEN_COLORS[:net.hidden_dim],
             edgecolor="white", alpha=0.9)
-    for i, v in enumerate(net.b1):
+    for i, v in enumerate(b1):
         ax1.text(i, v + 0.005, f"{v:.3f}", ha="center", fontsize=9)
     ax1.set_xticks(range(net.hidden_dim))
     ax1.set_xticklabels([f"H{i+1}" for i in range(net.hidden_dim)])
@@ -229,10 +223,9 @@ def plot_biases(net: NeuralNetwork, save_path: str = None):
     ax1.axhline(0, color="black", linewidth=0.7)
     ax1.grid(axis="y", alpha=0.3)
 
-    # Output biases
     colors_out = ["#4C72B0", "#DD8452", "#55A868"]
-    ax2.bar(range(3), net.b2, color=colors_out, edgecolor="white", alpha=0.9)
-    for i, v in enumerate(net.b2):
+    ax2.bar(range(3), b2, color=colors_out, edgecolor="white", alpha=0.9)
+    for i, v in enumerate(b2):
         ax2.text(i, v + 0.005, f"{v:.3f}", ha="center", fontsize=9)
     ax2.set_xticks(range(3))
     ax2.set_xticklabels([f"'{n}'" for n in CLASS_NAMES])
@@ -243,7 +236,6 @@ def plot_biases(net: NeuralNetwork, save_path: str = None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Biases plot saved -> {save_path}")
     plt.show()
     return fig
 
@@ -251,13 +243,16 @@ def plot_biases(net: NeuralNetwork, save_path: str = None):
 # ─── Weight stats ─────────────────────────────────────────────────────────────
 
 def print_weight_stats(net: NeuralNetwork):
+    w = net.get_weights()
+    W1, b1, W2, b2 = w["W1"], w["b1"], w["W2"], w["b2"]
+
     print("\n" + "=" * 55)
     print("  WEIGHT STATISTICS")
     print("=" * 55)
-    for name, W in [("W1 (input->hidden)", net.W1),
-                    ("b1 (hidden bias)",   net.b1.reshape(1, -1)),
-                    ("W2 (hidden->output)", net.W2),
-                    ("b2 (output bias)",   net.b2.reshape(1, -1))]:
+    for name, W in [("W1 (input->hidden)",  W1),
+                    ("b1 (hidden bias)",    b1.reshape(1, -1)),
+                    ("W2 (hidden->output)", W2),
+                    ("b2 (output bias)",    b2.reshape(1, -1))]:
         print(f"  {name:25s}  "
               f"shape={str(W.shape):10s}  "
               f"min={W.min():+.3f}  max={W.max():+.3f}  "
@@ -265,101 +260,43 @@ def print_weight_stats(net: NeuralNetwork):
     print("=" * 55)
 
     print("\n  Per-hidden-unit weight summary (W1 columns):")
-    for h in range(net.W1.shape[1]):
-        col = net.W1[:, h]
+    for h in range(W1.shape[1]):
+        col = W1[:, h]
         print(f"    Hidden {h+1}: min={col.min():+.3f}  max={col.max():+.3f}  "
               f"mean={col.mean():+.3f}  std={col.std():.3f}")
 
     print("\n  Per-output-unit weight summary (W2 columns):")
     for k, name in enumerate(CLASS_NAMES):
-        col = net.W2[:, k]
+        col = W2[:, k]
         print(f"    Output '{name}': "
               + "  ".join([f"H{h+1}={col[h]:+.3f}" for h in range(len(col))]))
 
 
 def print_interpretation(net: NeuralNetwork):
-    W1, W2 = net.W1, net.W2
+    w = net.get_weights()
+    W1, W2 = w["W1"], w["W2"]
     H = W1.shape[1]
 
     print("\n" + "=" * 60)
     print("  WEIGHT INTERPRETATION")
     print("=" * 60)
 
-    print("""
-[Part 3a] Input -> Hidden Weights  (W1, shape 64x3)
-----------------------------------------------------------------
-Each column of W1 is one hidden unit's 'receptive field'.
-Reshaped to 8x8, positive weights (red) indicate pixel
-positions that excite the unit; negative weights (blue)
-suppress it.
-
-With only 3 hidden units, each unit must encode broad,
-class-level structure rather than fine details:
-
-  * Hidden Unit 1 typically develops a pattern sensitive
-    to vertical strokes / symmetry - features that differ
-    most between B/E (asymmetric) and 0 (symmetric oval).
-
-  * Hidden Unit 2 tends to respond to horizontal bar
-    structure - the three horizontal strokes of E vs the
-    rounded curves of 0 vs the two bumps of B.
-
-  * Hidden Unit 3 captures residual discriminative
-    information, often a mix of edge/corner sensitivity
-    that helps break ties between B and E, which share
-    vertical left edges.
-
-Because the noise magnitude (+/-5) greatly exceeds the
-template signal (+/-1), the weights represent averaged
-tendencies across 100 noisy realisations rather than
-crisp edge detectors - hence the smooth, diffuse maps.
-
-[Part 3b] Hidden -> Output Weights  (W2, shape 3x3)
-----------------------------------------------------------------
-W2 is a small 3x3 matrix: each output unit (B, 0, E)
-linearly combines the three hidden activations.
-
-Positive W2[h, k] -> hidden unit h's activation pushes
-probability toward class k.
-Negative W2[h, k] -> it suppresses class k.
-
-The softmax then converts the raw scores to probabilities,
-so the sign pattern of each column of W2 encodes which
-hidden unit 'votes for' vs 'votes against' each class.
-
-In a well-trained network the three columns of W2 will
-show complementary sign patterns: if H1 votes strongly
-FOR '0', it should vote AGAINST 'B' and 'E', ensuring
-that only the correct class receives the highest logit.
-""")
-
-
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     os.makedirs("plots", exist_ok=True)
 
-    print("[1] Loading trained model …")
     net = NeuralNetwork.load("models/net_64_3_3")
-    print(f"    {net}")
 
     print_weight_stats(net)
 
-    print("\n[2] Plot (a): Input -> Hidden weight heatmaps …")
     plot_input_hidden_weights(net,
         save_path="plots/weights_input_hidden.png")
-
-    print("\n[3] Plot (a+): Template vs weight overlay …")
     plot_input_hidden_overlay(net,
         save_path="plots/weights_overlay.png")
-
-    print("\n[4] Plot (b): Hidden -> Output weights …")
     plot_hidden_output_weights(net,
         save_path="plots/weights_hidden_output.png")
-
-    print("\n[5] Plot: Bias values …")
-    plot_biases(net, save_path="plots/biases.png")
+    plot_biases(net,
+        save_path="plots/biases.png")
 
     print_interpretation(net)
-
-    print("\nPart 3 complete.")

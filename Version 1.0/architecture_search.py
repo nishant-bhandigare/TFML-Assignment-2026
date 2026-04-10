@@ -26,7 +26,6 @@ from data_generation import generate_dataset, SAMPLES_PER_CLASS
 # ── Experiment configuration ─────────────────────────────────────────────────
 HIDDEN_SIZES      = [1, 2, 3, 4, 5, 8, 10, 16, 32]
 SAMPLE_SIZES      = [10, 20, 50, 100, 200]          # per class
-# Sample-complexity experiments run for every architecture in HIDDEN_SIZES
 SAMPLES_FOR_ARCH  = HIDDEN_SIZES
 
 TRAIN_KWARGS = dict(
@@ -45,12 +44,12 @@ COLOR_MAP = {x: PALETTE[i] for i, x in enumerate(HIDDEN_SIZES)}
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def run_single(X_tr, y_tr, l_tr, X_v, y_v, l_v, hidden_dim, seed=0):
-    """Train one 64-X-3 network; return (history, val_acc, val_loss)."""
+    """Train one 64-X-3 network; return (history, train_acc, val_acc)."""
     net = NeuralNetwork(input_dim=64, hidden_dim=hidden_dim,
                         output_dim=3, seed=seed)
     history = train(net, X_tr, y_tr, l_tr, X_v, y_v, l_v,
                     seed=seed, **TRAIN_KWARGS)
-    _, val_acc  = evaluate(net, X_v, y_v, l_v)
+    _, val_acc   = evaluate(net, X_v, y_v, l_v)
     _, train_acc = evaluate(net, X_tr, y_tr, l_tr)
     return history, train_acc, val_acc
 
@@ -66,27 +65,15 @@ def make_split(n_per_class, seed=SEED):
 def architecture_search(full_split):
     """
     Train each architecture on the full 300-sample dataset.
-    Returns results dict: { X: {train_acc, val_acc, history} }
+    Returns results dict: { X: {train_acc, val_acc, history, n_params} }
     """
     X_tr, y_tr, l_tr, X_v, y_v, l_v = full_split
     results = {}
 
-    print(f"\n{'='*60}")
-    print(f"  ARCHITECTURE SEARCH  (64-X-3,  X in {HIDDEN_SIZES})")
-    print(f"  Train: {len(X_tr)}  Val: {len(X_v)}")
-    print(f"{'='*60}")
-
     for hd in HIDDEN_SIZES:
-        t0 = time.time()
         history, tr_acc, v_acc = run_single(
             X_tr, y_tr, l_tr, X_v, y_v, l_v, hidden_dim=hd)
-        elapsed = time.time() - t0
         n_params = 64 * hd + hd + hd * 3 + 3
-        best_ep  = history.get("best_epoch", len(history["val_loss"]))
-        print(f"  X={hd:>2d}  params={n_params:>4d}  "
-              f"best_ep={best_ep:>4d}  "
-              f"train={tr_acc*100:5.1f}%  val={v_acc*100:5.1f}%  "
-              f"({elapsed:.1f}s)")
         results[hd] = {"train_acc": tr_acc, "val_acc": v_acc,
                        "history": history, "n_params": n_params}
 
@@ -103,25 +90,17 @@ def sample_complexity(hidden_sizes_subset=None):
     if hidden_sizes_subset is None:
         hidden_sizes_subset = SAMPLES_FOR_ARCH
 
-    print(f"\n{'='*60}")
-    print(f"  SAMPLE COMPLEXITY ANALYSIS")
-    print(f"  Architectures : {hidden_sizes_subset}")
-    print(f"  Samples/class : {SAMPLE_SIZES}")
-    print(f"{'='*60}")
-
     sc_results = {hd: {} for hd in hidden_sizes_subset}
 
     for n in SAMPLE_SIZES:
         split = make_split(n_per_class=n, seed=SEED)
         X_tr, y_tr, l_tr, X_v, y_v, l_v = split
-        print(f"\n  n_per_class={n}  (train={len(X_tr)}, val={len(X_v)})")
 
         for hd in hidden_sizes_subset:
             _, _, v_acc = run_single(
                 X_tr, y_tr, l_tr, X_v, y_v, l_v,
                 hidden_dim=hd, seed=SEED)
             sc_results[hd][n] = v_acc
-            print(f"    X={hd:>2d}  val={v_acc*100:5.1f}%")
 
     return sc_results
 
@@ -134,12 +113,12 @@ def plot_accuracy_vs_hidden(results: dict, save_path=None):
     Top row — accuracy vs X (train + val), with annotated best point.
     Bottom row — parameter count vs X, val loss at best epoch.
     """
-    xs      = HIDDEN_SIZES
-    tr_accs = [results[x]["train_acc"] * 100 for x in xs]
-    v_accs  = [results[x]["val_acc"]   * 100 for x in xs]
-    params  = [results[x]["n_params"]        for x in xs]
-    v_losses= [min(results[x]["history"]["val_loss"]) for x in xs]
-    best_x  = xs[int(np.argmax(v_accs))]
+    xs       = HIDDEN_SIZES
+    tr_accs  = [results[x]["train_acc"] * 100 for x in xs]
+    v_accs   = [results[x]["val_acc"]   * 100 for x in xs]
+    params   = [results[x]["n_params"]        for x in xs]
+    v_losses = [min(results[x]["history"]["val_loss"]) for x in xs]
+    best_x   = xs[int(np.argmax(v_accs))]
 
     fig = plt.figure(figsize=(14, 10))
     fig.suptitle("Part 5(a) — Architecture Search: 64-X-3 Networks",
@@ -153,7 +132,6 @@ def plot_accuracy_vs_hidden(results: dict, save_path=None):
     ax1.plot(xs, v_accs,  "s--", color="#DD8452", linewidth=2.2,
              markersize=8, label="Val accuracy",   zorder=3)
 
-    # Highlight best
     best_va = results[best_x]["val_acc"] * 100
     ax1.axvline(best_x, color="#55A868", linestyle=":", linewidth=1.5,
                 label=f"Best X={best_x} ({best_va:.1f}%)")
@@ -173,7 +151,6 @@ def plot_accuracy_vs_hidden(results: dict, save_path=None):
     ax1.set_ylim(30, 105)
     ax1.grid(True, alpha=0.3)
 
-    # Annotate all val points
     for x, va in zip(xs, v_accs):
         ax1.annotate(f"{va:.0f}%", (x, va),
                      textcoords="offset points", xytext=(0, 9),
@@ -211,15 +188,12 @@ def plot_accuracy_vs_hidden(results: dict, save_path=None):
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Accuracy vs X plot saved -> {save_path}")
     plt.show()
     return fig
 
 
 def plot_loss_curves_grid(results: dict, save_path=None):
-    """
-    Loss curves for every architecture in a grid, colour-coded by hidden size.
-    """
+    """Loss curves for every architecture in a grid, colour-coded by hidden size."""
     n  = len(HIDDEN_SIZES)
     nc = 3
     nr = (n + nc - 1) // nc
@@ -249,14 +223,12 @@ def plot_loss_curves_grid(results: dict, save_path=None):
         ax.grid(True, alpha=0.25)
         ax.tick_params(labelsize=7)
 
-    # Hide spare axes
     for j in range(i + 1, len(axes_flat)):
         axes_flat[j].axis("off")
 
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Loss curves grid saved -> {save_path}")
     plt.show()
     return fig
 
@@ -267,8 +239,8 @@ def plot_sample_complexity(sc_results: dict, save_path=None):
       Left  — accuracy vs n_samples for each architecture (line chart)
       Right — heatmap of val accuracy (rows=architecture, cols=n_samples)
     """
-    hds   = sorted(sc_results.keys())
-    ns    = SAMPLE_SIZES
+    hds = sorted(sc_results.keys())
+    ns  = SAMPLE_SIZES
 
     fig, (ax_line, ax_hm) = plt.subplots(1, 2, figsize=(14, 5.5))
     fig.suptitle("Part 5(b) — Sample Complexity: Val Accuracy vs Training Set Size",
@@ -277,8 +249,7 @@ def plot_sample_complexity(sc_results: dict, save_path=None):
     # ── Line chart ────────────────────────────────────────────────────────
     for hd in hds:
         accs = [sc_results[hd][n] * 100 for n in ns]
-        col  = COLOR_MAP[hd]
-        ax_line.plot(ns, accs, "o-", color=col, linewidth=2,
+        ax_line.plot(ns, accs, "o-", color=COLOR_MAP[hd], linewidth=2,
                      markersize=7, label=f"X={hd}")
 
     ax_line.set_xlabel("Training Samples per Class", fontsize=11)
@@ -289,7 +260,6 @@ def plot_sample_complexity(sc_results: dict, save_path=None):
     ax_line.grid(True, alpha=0.3)
     ax_line.set_ylim(20, 105)
 
-    # Annotate final point (n=200) for each arch
     for hd in hds:
         final_acc = sc_results[hd][ns[-1]] * 100
         ax_line.annotate(f"X={hd}", xy=(ns[-1], final_acc),
@@ -298,18 +268,16 @@ def plot_sample_complexity(sc_results: dict, save_path=None):
 
     # ── Heatmap ───────────────────────────────────────────────────────────
     matrix = np.array([[sc_results[hd][n] * 100 for n in ns] for hd in hds])
-    im = ax_hm.imshow(matrix, cmap="YlGn", aspect="auto",
-                      vmin=20, vmax=100)
+    im = ax_hm.imshow(matrix, cmap="YlGn", aspect="auto", vmin=20, vmax=100)
     ax_hm.set_xticks(range(len(ns)))
     ax_hm.set_yticks(range(len(hds)))
-    ax_hm.set_xticklabels([str(n) for n in ns],  fontsize=10)
+    ax_hm.set_xticklabels([str(n) for n in ns],    fontsize=10)
     ax_hm.set_yticklabels([f"X={h}" for h in hds], fontsize=10)
     ax_hm.set_xlabel("Samples per Class", fontsize=11)
     ax_hm.set_ylabel("Architecture (X)", fontsize=11)
     ax_hm.set_title("Val Accuracy (%) Heatmap", fontsize=12)
     plt.colorbar(im, ax=ax_hm, fraction=0.046, pad=0.04, label="Val Accuracy (%)")
 
-    # Annotate cells
     for i, hd in enumerate(hds):
         for j, n in enumerate(ns):
             val = matrix[i, j]
@@ -320,15 +288,14 @@ def plot_sample_complexity(sc_results: dict, save_path=None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Sample complexity plot saved -> {save_path}")
     plt.show()
     return fig
 
 
 def plot_accuracy_vs_X_by_samples(sc_results: dict, save_path=None):
     """
-    Bonus: For each sample count, plot accuracy vs X — shows how the
-    optimal architecture changes as data availability grows.
+    For each sample count, plot accuracy vs X — shows how the optimal
+    architecture changes as data availability grows.
     """
     hds = sorted(sc_results.keys())
     ns  = SAMPLE_SIZES
@@ -354,7 +321,6 @@ def plot_accuracy_vs_X_by_samples(sc_results: dict, save_path=None):
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Accuracy vs X by sample count saved -> {save_path}")
     plt.show()
     return fig
 
@@ -378,12 +344,12 @@ def print_summary_table(results: dict):
 
     best_x = max(HIDDEN_SIZES, key=lambda x: results[x]["val_acc"])
     print(f"\n  * Best architecture by val accuracy: X = {best_x}")
-    print(f"     Val accuracy = {results[best_x]['val_acc']*100:.2f}%")
-    print(f"     Total params = {results[best_x]['n_params']}")
+    print(f"    Val accuracy = {results[best_x]['val_acc']*100:.2f}%")
+    print(f"    Total params = {results[best_x]['n_params']}")
 
 
 def print_justification(results: dict, sc_results: dict):
-    best_x = max(HIDDEN_SIZES, key=lambda x: results[x]["val_acc"])
+    best_x  = max(HIDDEN_SIZES, key=lambda x: results[x]["val_acc"])
     best_va = results[best_x]["val_acc"] * 100
 
     print("""
@@ -433,7 +399,7 @@ Final Recommendation
     print(f"""
   Justification:
     * Achieves the highest or joint-highest validation accuracy.
-    * Remains compact relative to the 300-sample training set -
+    * Remains compact relative to the 300-sample training set —
       avoiding overfitting that larger X values exhibit.
     * Converges reliably within 2000 epochs across seeds.
     * For this specific problem (3 noisy character classes, 8x8 grid)
@@ -448,46 +414,26 @@ if __name__ == "__main__":
     os.makedirs("plots",  exist_ok=True)
     os.makedirs("models", exist_ok=True)
 
-    # ── Full dataset split (used for architecture search) ─────────────────
-    print("[0] Preparing full dataset split …")
     full_split = make_split(n_per_class=SAMPLES_PER_CLASS, seed=SEED)
     X_tr, y_tr, l_tr, X_v, y_v, l_v = full_split
 
-    # ── Part 5a: Architecture search ─────────────────────────────────────
-    print("\n[1] Running architecture search …")
     arch_results = architecture_search(full_split)
-
     print_summary_table(arch_results)
 
-    print("\n[2] Plotting accuracy vs hidden size …")
     plot_accuracy_vs_hidden(arch_results,
         save_path="plots/arch_search_accuracy.png")
-
-    print("\n[3] Plotting loss curves grid …")
     plot_loss_curves_grid(arch_results,
         save_path="plots/arch_search_loss_curves.png")
 
-    # Save best architecture model
     best_x = max(HIDDEN_SIZES, key=lambda x: arch_results[x]["val_acc"])
-    print(f"\n[4] Retraining & saving best model (X={best_x}) …")
     best_net = NeuralNetwork(64, best_x, 3, seed=SEED)
     train(best_net, X_tr, y_tr, l_tr, X_v, y_v, l_v, seed=SEED, **TRAIN_KWARGS)
     best_net.save(f"models/net_64_{best_x}_3_best")
-    _, best_va = evaluate(best_net, X_v, y_v, l_v)
-    print(f"    Best model val accuracy: {best_va*100:.2f}%")
 
-    # ── Part 5b: Sample complexity ─────────────────────────────────────────
-    print("\n[5] Running sample complexity analysis …")
     sc_results = sample_complexity(hidden_sizes_subset=SAMPLES_FOR_ARCH)
-
-    print("\n[6] Plotting sample complexity …")
     plot_sample_complexity(sc_results,
         save_path="plots/sample_complexity.png")
-
-    print("\n[7] Plotting accuracy vs X by sample count …")
     plot_accuracy_vs_X_by_samples(sc_results,
         save_path="plots/acc_vs_X_by_samples.png")
 
     print_justification(arch_results, sc_results)
-
-    print("\nPart 5 complete.")
